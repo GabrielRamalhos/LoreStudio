@@ -1,0 +1,35 @@
+# Python and local environments
+__pycache__/
+*.py[cod]
+.venv/
+.kokoro-venv/
+.uv-python/
+.pytest_cache/
+.pytest-*/
+.test-*/
+*.egg-info/
+
+# User-owned runtime data, downloaded models and generated media
+projects/
+models/
+imagens/
+verification/
+*.mp4
+*.wav
+*.mp3
+*.srt
+*.ass
+*.words.json
+lore_oculta.db
+
+# Machine-specific configuration and credentials
+config/settings.json
+.env
+client_secret*.json
+token*.json
+
+# Build output and diagnostics
+build/
+dist/
+*.spec
+technical_report.json

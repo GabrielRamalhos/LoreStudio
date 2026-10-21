@@ -1,0 +1,15 @@
+Lore Oculta Studio — third-party notices
+
+Kokoro 0.9.4 and approved official model weights
+Origin: https://github.com/hexgrad/kokoro
+License: Apache License 2.0. A complete Apache-2.0 license must accompany the approved release input.
+
+FFmpeg (release-specific LGPL build)
+Origin and exact version: recorded in COMPONENT_MANIFEST.json for the release.
+License: LGPL-2.1-or-later. The release process rejects builds configured with --enable-gpl.
+
+libass (used by FFmpeg for optional ASS subtitles)
+Origin: https://github.com/libass/libass
+License: ISC. The distributed FFmpeg build must retain its corresponding LGPL notices and source-offer obligations.
+
+Piper, Piper voices, Ollama, ComfyUI, Stable Diffusion checkpoints, user projects and user settings are not distributed in the base package.

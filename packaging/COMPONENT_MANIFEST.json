@@ -1,0 +1,11 @@
+{
+  "package": "Lore Oculta Studio",
+  "version": "0.1.0",
+  "publisher": "Gabriel Ramalhos",
+  "components": [
+    {"name": "Lore Oculta Studio", "version": "0.1.0", "origin": "local source", "path": "app", "sha256": "generated-at-release", "license": "Proprietary"},
+    {"name": "Kokoro", "version": "0.9.4", "origin": "https://github.com/hexgrad/kokoro", "path": "packaging/vendor/kokoro", "sha256": "generated-at-release", "license": "Apache-2.0"},
+    {"name": "FFmpeg", "version": "audit-required", "origin": "recorded with release binary", "path": "packaging/vendor/ffmpeg/ffmpeg.exe", "sha256": "generated-at-release", "license": "LGPL-2.1-or-later"}
+  ],
+  "excluded": ["Piper", "Piper voices", "Ollama", "Ollama models", "ComfyUI", "Stable Diffusion checkpoints", "user projects and settings"]
+}

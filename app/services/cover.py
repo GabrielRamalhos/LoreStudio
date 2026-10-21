@@ -1,0 +1,193 @@
+import uuid
+from pathlib import Path
+
+from PySide6.QtCore import Qt, QRectF
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QImageReader, QImageWriter, QPainter, QPainterPath, QPen, QLinearGradient
+
+
+class CoverService:
+    """Cria a capa vertical de um projeto sem tocar nos artefatos do vídeo."""
+
+    size = (1080, 1920)
+
+    def __init__(self, projects):
+        self.projects = projects
+
+    @staticmethod
+    def _clean_copy(value: str, maximum: int = 90) -> str:
+        return ' '.join(str(value or '').replace('\n', ' ').split())[:maximum].upper()
+
+    @staticmethod
+    def _lines(text: str, font: QFont, width: int) -> list[str]:
+        words, lines, current = text.split(), [], ''
+        metrics = QFontMetrics(font)
+        for word in words:
+            candidate = f'{current} {word}'.strip()
+            if current and metrics.horizontalAdvance(candidate) > width:
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            lines.append(current)
+        return lines
+
+    def _fit_copy(self, text: str, width: int, height: int, maximum_lines: int, *, maximum_points: int = 104,
+                  minimum_points: int = 40) -> tuple[QFont, list[str]]:
+        for points in range(maximum_points, minimum_points - 1, -2):
+            # Arial is present in supported Windows installations; unlike
+            # optional display fonts it yields stable outlines in QPainter.
+            font = QFont('Arial')
+            font.setBold(True)
+            font.setPointSize(points)
+            lines = self._lines(text, font, width)
+            metrics = QFontMetrics(font)
+            if len(lines) <= maximum_lines and len(lines) * metrics.lineSpacing() <= height:
+                return font, lines
+        return font, self._lines(text, font, width)[:maximum_lines]
+
+    @staticmethod
+    def _draw_outlined_lines(painter: QPainter, font: QFont, lines: list[str], top: float, color: QColor, width: int,
+                             *, glow: bool = False, highlight_words: list[str] | None = None) -> None:
+        painter.setFont(font)
+        metrics = QFontMetrics(font)
+        y = top + metrics.ascent()
+        stroke = max(4, round(font.pointSizeF() * .10))
+        highlighted = {word.strip('.,!?;:').casefold() for word in (highlight_words or [])}
+        for line in lines:
+            x = (width - metrics.horizontalAdvance(line)) / 2
+            path = QPainterPath()
+            path.addText(x, y, font, line)
+            if glow:
+                painter.setPen(QPen(QColor(190, 0, 0, 105), stroke + 6, Qt.PenStyle.SolidLine,
+                                    Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPath(path)
+            painter.setPen(QPen(QColor(0, 0, 0), stroke, Qt.PenStyle.SolidLine,
+                                Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            # Color the line that contains a selected word. This preserves a
+            # stable native text path on Windows while keeping the white/yellow
+            # hierarchy requested by the editorial plan.
+            line_fill = QColor('#ffd600') if any(word.strip('.,!?;:').casefold() in highlighted for word in line.split()) else color
+            painter.setBrush(line_fill)
+            painter.drawPath(path)
+            y += metrics.lineSpacing()
+
+    @staticmethod
+    def _text_positions(position: str, headline_height: int, subheadline_height: int) -> tuple[int, int]:
+        position = position if position in {'top', 'middle', 'bottom'} else 'top'
+        if position == 'middle':
+            headline_top = max(160, 720 - headline_height // 2)
+        elif position == 'bottom':
+            headline_top = max(160, 1250 - headline_height)
+        else:
+            headline_top = 120
+        subheadline_top = min(1640, headline_top + headline_height + 64)
+        if subheadline_top + subheadline_height > 1755:
+            subheadline_top = max(headline_top + headline_height + 30, 1755 - subheadline_height)
+        return headline_top, subheadline_top
+
+    @staticmethod
+    def _preset_overlay(painter: QPainter, canvas: QImage, preset: str, intensity: str) -> None:
+        alpha = {'leve': 34, 'moderada': 62, 'intensa': 94}.get(intensity, 62)
+        if preset == 'confronto':
+            gradient = QLinearGradient(0, 0, canvas.width(), 0)
+            gradient.setColorAt(0, QColor(20, 45, 120, alpha))
+            gradient.setColorAt(.48, QColor(0, 0, 0, 0))
+            gradient.setColorAt(1, QColor(139, 0, 0, alpha))
+        elif preset == 'revelacao':
+            gradient = QLinearGradient(0, 0, canvas.width(), canvas.height())
+            gradient.setColorAt(0, QColor(65, 12, 85, alpha))
+            gradient.setColorAt(.55, QColor(0, 0, 0, 0))
+            gradient.setColorAt(1, QColor(15, 90, 74, alpha))
+        else:
+            gradient = QLinearGradient(0, 0, 0, canvas.height())
+            gradient.setColorAt(0, QColor(65, 0, 0, alpha))
+            gradient.setColorAt(.5, QColor(0, 0, 0, 0))
+            gradient.setColorAt(1, QColor(0, 0, 0, alpha))
+        painter.fillRect(canvas.rect(), gradient)
+
+    @staticmethod
+    def _draw_border(painter: QPainter, canvas: QImage, intensity: str) -> None:
+        width = {'leve': 4, 'moderada': 7, 'intensa': 10}.get(intensity, 7)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor('#8b0000'), width))
+        inset = width // 2 + 10
+        painter.drawRect(inset, inset, canvas.width() - (inset * 2), canvas.height() - (inset * 2))
+        painter.setPen(QPen(QColor('#ffd600'), max(2, width // 5)))
+        painter.drawRect(inset + width, inset + width, canvas.width() - 2 * (inset + width), canvas.height() - 2 * (inset + width))
+
+    def generate(self, project, source: str | Path, headline: str = '', subheadline: str = '', brand: str = 'Lore Oculta',
+                 *, preset: str = 'cinematico', effect_intensity: str = 'moderada', border: bool = True,
+                 text_position: str = 'top', highlight_words: list[str] | None = None) -> Path:
+        source = Path(source)
+        if not source.is_file():
+            raise ValueError(f'Imagem de capa inexistente: {source.name or source}.')
+
+        reader = QImageReader(str(source))
+        reader.setAutoTransform(True)
+        if not reader.canRead():
+            raise ValueError(f'Imagem de capa inválida: {source.name}.')
+        image = reader.read()
+        if image.isNull():
+            raise ValueError(f'Imagem de capa inválida: {source.name}.')
+
+        target = self.projects.cover_path(project)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f'.{target.stem}-{uuid.uuid4().hex}.part.png')
+        try:
+            canvas = QImage(*self.size, QImage.Format.Format_RGB888)
+            canvas.fill(QColor('black'))
+            scaled = image.scaled(*self.size, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                  Qt.TransformationMode.SmoothTransformation)
+            painter = QPainter(canvas)
+            try:
+                painter.drawImage((canvas.width() - scaled.width()) // 2,
+                                  (canvas.height() - scaled.height()) // 2, scaled)
+                # Darkened edges keep text readable while retaining the user's
+                # original image as the visual focus.
+                gradient = QLinearGradient(0, 0, 0, canvas.height())
+                gradient.setColorAt(0, QColor(0, 0, 0, 175))
+                gradient.setColorAt(.38, QColor(0, 0, 0, 20))
+                gradient.setColorAt(1, QColor(0, 0, 0, 150))
+                painter.fillRect(canvas.rect(), gradient)
+                self._preset_overlay(painter, canvas, preset, effect_intensity)
+                headline = self._clean_copy(headline or project.theme)
+                subheadline = self._clean_copy(subheadline)
+                if len(headline.split()) > 6:
+                    raise ValueError('O texto principal da capa deve ter no máximo seis palavras.')
+                if len(subheadline.split()) > 5:
+                    raise ValueError('O texto secundário da capa deve ter no máximo cinco palavras.')
+                sub_font, sub_lines, subheadline_top = QFont(), [], 1330
+                if headline:
+                    font, lines = self._fit_copy(headline, 940, 420, 2, maximum_points=104, minimum_points=52)
+                    headline_height = len(lines) * QFontMetrics(font).lineSpacing()
+                    sub_font, sub_lines = self._fit_copy(subheadline, 820, 82, 1, maximum_points=44, minimum_points=24) if subheadline else (font, [])
+                    sub_height = len(sub_lines) * QFontMetrics(sub_font).lineSpacing()
+                    headline_top, subheadline_top = self._text_positions(text_position, headline_height, sub_height)
+                    self._draw_outlined_lines(painter, font, lines, headline_top, QColor('#ffffff'), canvas.width(),
+                                              glow=effect_intensity == 'intensa', highlight_words=highlight_words)
+                if subheadline:
+                    self._draw_outlined_lines(painter, sub_font, sub_lines, subheadline_top, QColor('#ffffff'), canvas.width(), glow=False)
+                brand = self._clean_copy(brand, 28)
+                if brand:
+                    brand_font = QFont('Georgia')
+                    brand_font.setBold(True)
+                    brand_font.setPointSize(36)
+                    self._draw_outlined_lines(painter, brand_font, [brand], 1810, QColor('#ffe51b'), canvas.width())
+                if border:
+                    self._draw_border(painter, canvas, effect_intensity)
+            finally:
+                painter.end()
+            writer = QImageWriter(str(temporary), b'png')
+            saved = writer.write(canvas)
+            error = writer.errorString()
+            # No Windows, o arquivo continua bloqueado enquanto o writer existe.
+            del writer
+            if not saved:
+                raise OSError(f'Não foi possível salvar a capa: {error}.')
+            temporary.replace(target)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
+        return target
