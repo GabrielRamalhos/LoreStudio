@@ -91,6 +91,31 @@ def test_create_cover_exports_lossless_png_with_reviewed_composition(tmp_path):
     repo.cx.close()
 
 
+def test_cover_preserves_individual_highlight_words_without_changing_video_artifacts(tmp_path):
+    repo, project, service = project_service(tmp_path)
+    source = image(tmp_path / 'source.png', 1280, 720)
+    video = service.artifact(project, 'video_final.mp4')
+    video.write_bytes(b'video original')
+
+    cover = service.create_cover(
+        project, source, headline='O BATMAN TRAIU TODOS',
+        preset='confronto', effect_intensity='intensa', text_position='top',
+        highlight_words=['BATMAN'],
+    )
+
+    rendered = QImage(str(cover))
+    yellow_pixels = 0
+    white_pixels = 0
+    for y in range(80, 680, 20):
+        for x in range(40, 1040, 20):
+            color = rendered.pixelColor(x, y)
+            yellow_pixels += int(color.red() > 190 and color.green() > 150 and color.blue() < 90)
+            white_pixels += int(min(color.red(), color.green(), color.blue()) > 170)
+    assert yellow_pixels > 0 and white_pixels > 0
+    assert video.read_bytes() == b'video original'
+    repo.cx.close()
+
+
 def test_cover_rejects_copy_that_would_hide_the_visual_with_excessive_text(tmp_path):
     repo, project, service = project_service(tmp_path)
     source = image(tmp_path / 'source.png')

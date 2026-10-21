@@ -49,28 +49,29 @@ class CoverService:
     @staticmethod
     def _draw_outlined_lines(painter: QPainter, font: QFont, lines: list[str], top: float, color: QColor, width: int,
                              *, glow: bool = False, highlight_words: list[str] | None = None) -> None:
+        """Draw compact cover text with individually highlighted words."""
         painter.setFont(font)
         metrics = QFontMetrics(font)
         y = top + metrics.ascent()
-        stroke = max(4, round(font.pointSizeF() * .10))
+        stroke = max(5, round(font.pointSizeF() * .115))
         highlighted = {word.strip('.,!?;:').casefold() for word in (highlight_words or [])}
         for line in lines:
             x = (width - metrics.horizontalAdvance(line)) / 2
-            path = QPainterPath()
-            path.addText(x, y, font, line)
-            if glow:
-                painter.setPen(QPen(QColor(190, 0, 0, 105), stroke + 6, Qt.PenStyle.SolidLine,
+            words = line.split()
+            for index, word in enumerate(words):
+                path = QPainterPath()
+                path.addText(x, y, font, word)
+                if glow:
+                    painter.setPen(QPen(QColor(185, 0, 0, 125), stroke + 8, Qt.PenStyle.SolidLine,
+                                        Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawPath(path)
+                painter.setPen(QPen(QColor(0, 0, 0), stroke, Qt.PenStyle.SolidLine,
                                     Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.setBrush(QColor('#ffe500') if word.strip('.,!?;:').casefold() in highlighted else color)
                 painter.drawPath(path)
-            painter.setPen(QPen(QColor(0, 0, 0), stroke, Qt.PenStyle.SolidLine,
-                                Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-            # Color the line that contains a selected word. This preserves a
-            # stable native text path on Windows while keeping the white/yellow
-            # hierarchy requested by the editorial plan.
-            line_fill = QColor('#ffd600') if any(word.strip('.,!?;:').casefold() in highlighted for word in line.split()) else color
-            painter.setBrush(line_fill)
-            painter.drawPath(path)
+                if index < len(words) - 1:
+                    x += metrics.horizontalAdvance(f'{word} ')
             y += metrics.lineSpacing()
 
     @staticmethod
@@ -82,7 +83,7 @@ class CoverService:
             headline_top = max(160, 1250 - headline_height)
         else:
             headline_top = 120
-        subheadline_top = min(1640, headline_top + headline_height + 64)
+        subheadline_top = min(1660, headline_top + headline_height + 54)
         if subheadline_top + subheadline_height > 1755:
             subheadline_top = max(headline_top + headline_height + 30, 1755 - subheadline_height)
         return headline_top, subheadline_top
@@ -147,9 +148,10 @@ class CoverService:
                 # Darkened edges keep text readable while retaining the user's
                 # original image as the visual focus.
                 gradient = QLinearGradient(0, 0, 0, canvas.height())
-                gradient.setColorAt(0, QColor(0, 0, 0, 175))
-                gradient.setColorAt(.38, QColor(0, 0, 0, 20))
-                gradient.setColorAt(1, QColor(0, 0, 0, 150))
+                gradient.setColorAt(0, QColor(0, 0, 0, 205))
+                gradient.setColorAt(.27, QColor(0, 0, 0, 96))
+                gradient.setColorAt(.49, QColor(0, 0, 0, 8))
+                gradient.setColorAt(1, QColor(0, 0, 0, 118))
                 painter.fillRect(canvas.rect(), gradient)
                 self._preset_overlay(painter, canvas, preset, effect_intensity)
                 headline = self._clean_copy(headline or project.theme)
@@ -160,7 +162,7 @@ class CoverService:
                     raise ValueError('O texto secundário da capa deve ter no máximo cinco palavras.')
                 sub_font, sub_lines, subheadline_top = QFont(), [], 1330
                 if headline:
-                    font, lines = self._fit_copy(headline, 940, 420, 2, maximum_points=104, minimum_points=52)
+                    font, lines = self._fit_copy(headline, 960, 390, 2, maximum_points=116, minimum_points=56)
                     headline_height = len(lines) * QFontMetrics(font).lineSpacing()
                     sub_font, sub_lines = self._fit_copy(subheadline, 820, 82, 1, maximum_points=44, minimum_points=24) if subheadline else (font, [])
                     sub_height = len(sub_lines) * QFontMetrics(sub_font).lineSpacing()
