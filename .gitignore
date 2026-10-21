@@ -6,7 +6,7 @@ __pycache__/
 .uv-python/
 .pytest_cache/
 .pytest-*/
-.test-*/
+.test-*
 *.egg-info/
 
 # User-owned runtime data, downloaded models and generated media
