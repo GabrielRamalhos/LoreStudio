@@ -37,6 +37,7 @@ from app.services.visual_director import VISION_DIRECTOR_VERSION, describe_impor
 from app.services.hook_analysis import prompt as hook_prompt, response_schema as hook_response_schema, validate_response as validate_hook_response
 from app.services.cover_copy import prompt as cover_copy_prompt, response_schema as cover_copy_schema, validate as validate_cover_copy, fallback as cover_copy_fallback
 from app.services.cover_plan import PRESETS as COVER_PRESETS, prompt as cover_plan_prompt, response_schema as cover_plan_schema, validate as validate_cover_plan, fallback as cover_plan_fallback
+from app.services.long_video import create_shorts_from_long_video
 
 class Window(QMainWindow):
     def __init__(self):
@@ -110,6 +111,7 @@ class Window(QMainWindow):
         dashboard_optional_body_layout.setContentsMargins(0, 0, 0, 0)
         self.button(dashboard_optional_body_layout, 'Analisar gancho com IA local', self.analyze_hook)
         dashboard_optional_body_layout.addWidget(self.hook_suggestions)
+        self.button(dashboard_optional_body_layout, 'Criar Shorts de vídeo longo automaticamente', self.create_shorts_from_long_video)
         self.button(dashboard_optional_body_layout, 'Novo Short', self.new_project)
         dashboard_optional_layout.addWidget(self.dashboard_optional_body)
         self.dashboard_optional_tools.toggled.connect(self.dashboard_optional_body.setVisible)
@@ -1052,6 +1054,52 @@ class Window(QMainWindow):
             self.import_images()
         except Exception as error:
             self.error('Importar imagens', error)
+
+    def create_shorts_from_long_video(self):
+        """One action for the batch workflow; all planning and export is local."""
+        if self.workers:
+            return
+        filename, _ = QFileDialog.getOpenFileName(
+            self, 'Selecionar vídeo longo local', '',
+            'Vídeos (*.mp4 *.mov *.mkv *.webm *.avi *.m4v)',
+        )
+        if not filename:
+            return
+        count, accepted = QInputDialog.getInt(
+            self, 'Criar Shorts automaticamente', 'Quantidade de Shorts prontos:', 5, 1, 20,
+        )
+        if not accepted:
+            return
+        try:
+            settings = resolved_mapping(asdict(self.settings) | self.tool_settings())
+            model = self.ollama.currentText().strip()
+            provider = self.ollama_provider() if model else None
+            worker = JobWorker(lambda cancel: create_shorts_from_long_video(
+                self.service, source=filename, ffmpeg=settings['ffmpeg'],
+                asr_model=settings.get('asr_model', 'small'), provider=provider,
+                count=count, cancel=cancel,
+            ))
+            self.workers.append(worker)
+
+            def completed_batch(result):
+                batch, children = result
+                completed = sum(child.statuses.get('video') == StepStatus.DONE.value for child in children)
+                self.current = None
+                self.refresh()
+                self.tabs.setCurrentIndex(1)
+                self.status_label.setText(
+                    f'Lote "{batch.theme}" concluído: {completed}/{len(children)} Shorts prontos. '
+                    'Abra um projeto na lista para ver o MP4 ou o relatório técnico.'
+                )
+
+            worker.succeeded.connect(completed_batch)
+            worker.failed.connect(self.failed)
+            worker.finished.connect(lambda: self.finished(worker))
+            self.set_busy(True)
+            self.status_label.setText('Importando vídeo, transcrevendo, selecionando trechos e renderizando Shorts automaticamente…')
+            worker.start()
+        except Exception as error:
+            self.error('Vídeo longo automático', error)
 
     def remove_image(self):
         try:
