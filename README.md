@@ -29,6 +29,12 @@ O aplicativo gera a narração, sincroniza as legendas e exporta o MP4 vertical.
 
 Para ajustar somente um item, use **Mídias**: importar ou trocar imagens, escolher capa, adicionar uma trilha e exportar novamente. As imagens são enquadradas em 1080×1920 sem cortar bordas; imagens horizontais ou quadradas recebem faixas neutras.
 
+### Criar vários Shorts de um vídeo longo
+
+Em **Criar Short > Ferramentas opcionais**, use **Criar Shorts de vídeo longo automaticamente**. Selecione um arquivo local e informe quantos Shorts deseja (o padrão é 5). O Studio copia a fonte para um projeto-pai, extrai o áudio, cria uma transcrição com timestamps reais por palavra, escolhe trechos falados e renderiza cada Short em seu próprio projeto, com legendas ASS sincronizadas e o áudio original.
+
+Quando o Ollama local estiver configurado, o diretor editorial apenas classifica trechos que já foram delimitados pela fala real; ele não pode inventar falas ou alterar os limites. Sem Ollama, o Studio usa a seleção determinística registrada no manifesto `shorts-planejados.json`. Um erro em um corte não apaga os demais: cada projeto-filho conserva o próprio MP4, log e `technical_report.json`.
+
 ### Capas
 
 Em **Mídias > Opções avançadas de edição**, **Gerar capa com IA** usa o Ollama local para propor uma imagem já importada, texto curto, preset e composição. A justificativa da escolha fica visível e os campos continuam editáveis: você pode trocar a imagem, o texto, a posição, o estilo, a intensidade e a moldura antes de gerar novamente. A capa é exportada em `capa.png` (1080×1920), sem alterar o MP4. Se o Ollama não estiver disponível, use **Escolher e gerar capa** para o fluxo totalmente manual/offline.

@@ -18,4 +18,6 @@ class Project:
 def validate(theme: str, duration: int, fmt: str) -> None:
     if not theme.strip(): raise ValueError("Tema é obrigatório.")
     if fmt not in {"Short", "Longo"}: raise ValueError("Formato inválido.")
-    if not (15 <= duration <= 180 if fmt == "Short" else 180 <= duration <= 900): raise ValueError("Duração fora do limite do formato.")
+    # A source-video batch can be any length, including recordings longer
+    # than the planning limit previously used by the manual Longo form.
+    if not (15 <= duration <= 180 if fmt == "Short" else duration >= 1): raise ValueError("Duração fora do limite do formato.")
