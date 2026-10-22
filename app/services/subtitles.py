@@ -63,18 +63,29 @@ def _validate_word_intervals(words, duration: float):
             start=start, end=end, word=text, probability=_confidence(word), timing_repaired=False,
         ))
         previous_start = start
-    # A zero-width token is only repairable inside a real, observed gap after
-    # the preceding word.  We never distribute a whole phrase by text length.
+    # A zero-width token is only repairable in a tiny, observed local window.
+    # We never distribute a phrase by text length.  Faster-Whisper occasionally
+    # quantizes a word at exactly the shared boundary of its neighbours; in
+    # that isolated case the following *observed* word end gives us a bounded
+    # window for the token.  The repair remains explicit in the sidecar.
     repaired = []
     for index, item in enumerate(values):
         if item.end > item.start + .000001:
             continue
         previous = values[index - 1] if index else None
+        following = values[index + 1] if index + 1 < len(values) else None
         gap = item.start - previous.end if previous is not None else 0.0
-        if gap <= .001 or previous.end > item.start + .001:
+        if gap > .001 and previous.end <= item.start + .001:
+            item.start = max(previous.end, item.end - min(MAX_BOUNDARY_REPAIR_SECONDS, gap))
+            item.end = max(item.end, item.start + .001)
+        elif (following is not None and following.start <= item.start + .001
+              and following.end > item.start + .001):
+            # Word boundaries from Whisper use a coarse time grid.  Preserve
+            # the returned start and use at most 80 ms from the immediately
+            # following observed interval, never a duration inferred from text.
+            item.end = min(following.end, item.start + MAX_BOUNDARY_REPAIR_SECONDS)
+        else:
             continue
-        item.start = max(previous.end, item.end - min(MAX_BOUNDARY_REPAIR_SECONDS, gap))
-        item.end = max(item.end, item.start + .001)
         item.timing_repaired = True
         repaired.append(index)
     maximum_repairs = max(2, math.floor(len(values) * MAX_REPAIRED_WORD_RATIO))

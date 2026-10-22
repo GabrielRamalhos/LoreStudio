@@ -92,6 +92,19 @@ def test_word_caption_repairs_degenerate_token_inside_observed_boundary_gap():
     assert aligned[2].timing_repaired is False
 
 
+def test_word_caption_repairs_an_isolated_quantized_boundary_collision():
+    words = [
+        types.SimpleNamespace(start=1.0, end=1.2, word='a'),
+        types.SimpleNamespace(start=1.2, end=1.2, word='visão'),
+        types.SimpleNamespace(start=1.2, end=1.5, word='chegou'),
+    ]
+    aligned = _repair_zero_length_word_intervals(words, 2.0)
+    assert aligned[1].timing_repaired is True
+    assert aligned[1].start == pytest.approx(1.2)
+    assert aligned[1].end == pytest.approx(1.28)
+    assert aligned[2].timing_repaired is False
+
+
 def test_word_caption_persists_real_alignment_confidence_when_available(tmp_path, monkeypatch):
     audio = tmp_path / 'a.wav'
     with wave.open(str(audio), 'wb') as w:
