@@ -1,7 +1,7 @@
 import uuid
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import Qt, QRect, QRectF
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QImageReader, QImageWriter, QPainter, QPainterPath, QPen, QLinearGradient
 
 
@@ -12,6 +12,50 @@ class CoverService:
 
     def __init__(self, projects):
         self.projects = projects
+
+    @classmethod
+    def _foreground_rect(cls, image: QImage) -> QRect | None:
+        """Return a safe foreground area for media that does not fill 9:16.
+
+        Portrait artwork can remain full-frame. Landscape and square artwork
+        gets a sharp, uncropped foreground over a softened version of itself,
+        so a cover never silently removes the character at either edge.
+        """
+        if image.isNull() or image.width() <= 0 or image.height() <= 0:
+            return None
+        source_ratio = image.width() / image.height()
+        target_ratio = cls.size[0] / cls.size[1]
+        if source_ratio <= target_ratio * 1.15:
+            return None
+        max_width = round(cls.size[0] * .94)
+        max_height = round(cls.size[1] * .64)
+        scale = min(max_width / image.width(), max_height / image.height())
+        width = max(1, round(image.width() * scale))
+        height = max(1, round(image.height() * scale))
+        return QRect((cls.size[0] - width) // 2, (cls.size[1] - height) // 2 + 85, width, height)
+
+    @classmethod
+    def _draw_source_composition(cls, painter: QPainter, canvas: QImage, image: QImage) -> None:
+        """Render a full-frame portrait or uncropped landscape foreground."""
+        background = image.scaled(*cls.size, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                  Qt.TransformationMode.SmoothTransformation)
+        # Downscale first to create a deterministic low-cost blur approximation
+        # with Qt only; no cloud/GPU or additional image dependency is needed.
+        softened = background.scaled(54, 96, Qt.AspectRatioMode.IgnoreAspectRatio,
+                                     Qt.TransformationMode.SmoothTransformation)
+        softened = softened.scaled(*cls.size, Qt.AspectRatioMode.IgnoreAspectRatio,
+                                   Qt.TransformationMode.SmoothTransformation)
+        painter.drawImage(0, 0, softened)
+        rect = cls._foreground_rect(image)
+        if rect is None:
+            painter.drawImage((canvas.width() - background.width()) // 2,
+                              (canvas.height() - background.height()) // 2, background)
+            return
+        foreground = image.scaled(rect.width(), rect.height(), Qt.AspectRatioMode.KeepAspectRatio,
+                                  Qt.TransformationMode.SmoothTransformation)
+        x = rect.x() + (rect.width() - foreground.width()) // 2
+        y = rect.y() + (rect.height() - foreground.height()) // 2
+        painter.drawImage(x, y, foreground)
 
     @staticmethod
     def _clean_copy(value: str, maximum: int = 90) -> str:
@@ -139,12 +183,9 @@ class CoverService:
         try:
             canvas = QImage(*self.size, QImage.Format.Format_RGB888)
             canvas.fill(QColor('black'))
-            scaled = image.scaled(*self.size, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                                  Qt.TransformationMode.SmoothTransformation)
             painter = QPainter(canvas)
             try:
-                painter.drawImage((canvas.width() - scaled.width()) // 2,
-                                  (canvas.height() - scaled.height()) // 2, scaled)
+                self._draw_source_composition(painter, canvas, image)
                 # Darkened edges keep text readable while retaining the user's
                 # original image as the visual focus.
                 gradient = QLinearGradient(0, 0, 0, canvas.height())

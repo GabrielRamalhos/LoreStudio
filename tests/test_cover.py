@@ -4,6 +4,7 @@ import pytest
 
 from app.core.models import Project, StepStatus
 from app.database.repository import ProjectRepository
+from app.services.cover import CoverService
 from app.services.projects import ProjectService
 
 
@@ -113,6 +114,30 @@ def test_cover_preserves_individual_highlight_words_without_changing_video_artif
             white_pixels += int(min(color.red(), color.green(), color.blue()) > 170)
     assert yellow_pixels > 0 and white_pixels > 0
     assert video.read_bytes() == b'video original'
+    repo.cx.close()
+
+
+def test_cover_keeps_landscape_and_square_sources_inside_a_safe_foreground_area(tmp_path):
+    repo, project, service = project_service(tmp_path)
+    landscape = image(tmp_path / 'landscape.png', 1600, 900)
+    square = image(tmp_path / 'square.png', 1000, 1000)
+
+    landscape_rect = CoverService._foreground_rect(QImage(str(landscape)))
+    square_rect = CoverService._foreground_rect(QImage(str(square)))
+
+    assert landscape_rect is not None and square_rect is not None
+    assert landscape_rect.width() / landscape_rect.height() == pytest.approx(1600 / 900, rel=.02)
+    assert square_rect.width() == square_rect.height()
+    assert landscape_rect.left() >= 0 and landscape_rect.right() < CoverService.size[0]
+    assert square_rect.top() >= 0 and square_rect.bottom() < CoverService.size[1]
+    repo.cx.close()
+
+
+def test_cover_uses_full_frame_for_portrait_source(tmp_path):
+    repo, project, service = project_service(tmp_path)
+    portrait = image(tmp_path / 'portrait.png', 900, 1600)
+
+    assert CoverService._foreground_rect(QImage(str(portrait))) is None
     repo.cx.close()
 
 
