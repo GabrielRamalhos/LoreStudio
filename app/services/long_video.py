@@ -11,6 +11,8 @@ from pathlib import Path
 from app.core.models import Project, StepStatus
 from app.providers.process import executable, run_process
 from app.services.subtitles import alignment_metadata, write_word_srt
+from app.services.ass import write_ass
+from app.services.technical_validation import validate_final_video, write_report
 
 
 @dataclass(frozen=True)
@@ -142,3 +144,83 @@ def write_batch_manifest(service, batch: Project, segments: list[LongVideoSegmen
     temporary.write_text(json.dumps({'version': 1, 'segments': [item.as_dict() for item in segments]}, ensure_ascii=False, indent=2), encoding='utf8')
     temporary.replace(target)
     return target
+
+
+def write_child_captions(service, child: Project) -> Path:
+    """Create an ASS timeline relative to one source-video cut."""
+    source = child.settings.get('source_short')
+    if not isinstance(source, dict) or not isinstance(source.get('parent_project_id'), int):
+        raise ValueError('Este projeto não foi criado a partir de um vídeo longo.')
+    parent = service.repo.get(source['parent_project_id'])
+    alignment_name = str(parent.settings.get('long_video_alignment', 'fonte/transcricao.srt'))
+    record = alignment_metadata(service.artifact(parent, alignment_name))
+    raw_words = record.get('words') if isinstance(record, dict) else None
+    if not record.get('synchronized') or not isinstance(raw_words, list):
+        raise ValueError('A transcrição sincronizada do vídeo de origem não está disponível.')
+    try:
+        start, end = float(source['start']), float(source['end'])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError('Os limites do Short de origem são inválidos.') from error
+    words = []
+    for item in raw_words:
+        if not isinstance(item, dict):
+            continue
+        try:
+            word_start, word_end = float(item['start']), float(item['end'])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if word_start >= start and word_end <= end and word_end > word_start:
+            words.append({'start': round(word_start - start, 3), 'end': round(word_end - start, 3), 'text': item.get('text', '')})
+    if not words:
+        raise ValueError('O trecho selecionado não contém palavras sincronizadas para legendar.')
+    target = service.artifact(child, 'legendas.ass')
+    write_ass(words, target, style='retention')
+    child.settings['source_short_caption_words'] = len(words)
+    return target
+
+
+def source_short_command(ffmpeg: str, source: str | Path, captions: str | Path, output: str | Path, *, start: float, end: float, fps: int = 30) -> list[str]:
+    """Build a vertical H.264/AAC export from one source-video interval."""
+    if not 0 <= start < end:
+        raise ValueError('Os limites do Short de origem são inválidos.')
+    duration = end - start
+    captions = Path(captions).resolve().as_posix().replace('\\', '\\\\').replace(':', '\\:').replace("'", "\\\\'")
+    graph = (
+        '[0:v]split[fg][bg];'
+        '[bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:10[blur];'
+        '[fg]scale=1080:1920:force_original_aspect_ratio=decrease[fit];'
+        f"[blur][fit]overlay=(W-w)/2:(H-h)/2,setsar=1,fps={fps},ass=filename='{captions}'[video]"
+    )
+    return [executable(ffmpeg), '-y', '-hide_banner', '-nostdin', '-ss', f'{start:.3f}', '-i', str(source),
+            '-t', f'{duration:.3f}', '-filter_complex', graph, '-map', '[video]', '-map', '0:a:0?',
+            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
+            '-movflags', '+faststart', str(output)]
+
+
+def render_child_short(service, child: Project, ffmpeg: str, cancel=None, *, fps: int = 30) -> Path:
+    """Render transactionally: a failed retry never replaces a valid MP4."""
+    source_info = child.settings.get('source_short')
+    if not isinstance(source_info, dict) or not isinstance(source_info.get('parent_project_id'), int):
+        raise ValueError('Este projeto não foi criado a partir de um vídeo longo.')
+    parent = service.repo.get(source_info['parent_project_id'])
+    source = service.artifact(parent, str(source_info.get('source', '')))
+    if not source.is_file():
+        raise FileNotFoundError('O vídeo de origem não está mais disponível. Reimporte o vídeo longo.')
+    captions = write_child_captions(service, child)
+    output = service.artifact(child, 'video_final.mp4')
+    candidate = output.with_name(f'.{output.stem}.{uuid.uuid4().hex}.part.mp4')
+    try:
+        run_process(source_short_command(ffmpeg, source, captions, candidate, start=float(source_info['start']), end=float(source_info['end']), fps=fps), cancel, log=service.artifact(child, 'ffmpeg.log'))
+        duration = float(source_info['end']) - float(source_info['start'])
+        report = validate_final_video(ffmpeg, candidate, duration, fps)
+        write_report(report, service.artifact(child, 'technical_report.json'))
+        if not report.get('valid'):
+            raise ValueError('Validação técnica do MP4 falhou: ' + '; '.join(report.get('failures', [])))
+        candidate.replace(output)
+    finally:
+        candidate.unlink(missing_ok=True)
+    child.statuses['legendas'] = StepStatus.DONE.value
+    child.statuses['video'] = StepStatus.DONE.value
+    child.history.append({'step': 'video', 'status': StepStatus.DONE.value, 'message': 'Short vertical criado diretamente do vídeo de origem.'})
+    service.repo.save(child)
+    return output

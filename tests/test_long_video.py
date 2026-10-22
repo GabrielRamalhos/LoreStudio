@@ -1,6 +1,6 @@
 from app.core.models import Project
 from app.database.repository import ProjectRepository
-from app.services.long_video import deterministic_segments, persist_child_projects
+from app.services.long_video import deterministic_segments, persist_child_projects, source_short_command
 
 
 def words():
@@ -32,3 +32,17 @@ def test_child_projects_are_isolated_and_keep_source_ranges(tmp_path):
     assert all(item.settings['source_short']['source'] == 'fonte/original.mp4' for item in children)
     assert repo.get(parent.id).settings['long_video_source'] == 'fonte/original.mp4'
     repo.cx.close()
+
+
+def test_source_short_command_uses_vertical_composition_original_audio_and_ass(tmp_path, monkeypatch):
+    source = tmp_path / 'source.mp4'
+    captions = tmp_path / 'legendas.ass'
+    monkeypatch.setattr('app.services.long_video.executable', lambda _: 'ffmpeg')
+
+    command = source_short_command('ffmpeg', source, captions, tmp_path / 'short.mp4', start=12.5, end=42.5)
+
+    graph = command[command.index('-filter_complex') + 1]
+    assert '-ss' in command and command[command.index('-ss') + 1] == '12.500'
+    assert 'boxblur=20:10' in graph and 'ass=filename=' in graph
+    assert '-map' in command and '0:a:0?' in command
+    assert command[-1].endswith('short.mp4')
