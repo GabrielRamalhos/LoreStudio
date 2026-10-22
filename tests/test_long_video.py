@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from app.core.models import Project
 from app.database.repository import ProjectRepository
 from app.services.long_video import (
@@ -71,6 +73,17 @@ def test_local_director_can_only_select_existing_ranges():
 
     assert [item.title for item in selected] == ['Primeiro Ponto', 'Segundo Ponto']
     assert {(item.start, item.end) for item in selected} <= {(item.start, item.end) for item in candidates}
+
+
+def test_local_director_must_return_the_requested_number_when_candidates_exist():
+    candidates = deterministic_segments(words(), count=3, minimum_seconds=8, maximum_seconds=12)
+
+    class IncompleteDirector:
+        def complete_structured(self, _prompt, _schema):
+            return {'selected': [{'index': 0, 'title': 'Apenas um', 'score': 90}]}
+
+    with pytest.raises(ValueError, match='deveria selecionar'):
+        select_editorial_segments(IncompleteDirector(), candidates, count=2)
 
 
 def test_complete_batch_preserves_successful_children_when_one_render_fails(tmp_path, monkeypatch):

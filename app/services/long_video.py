@@ -146,7 +146,7 @@ def select_editorial_segments(provider, candidates: list[LongVideoSegment], *, c
     ]
     schema = {
         'type': 'object',
-        'properties': {'selected': {'type': 'array', 'minItems': 1, 'maxItems': min(count, len(candidates)), 'items': {
+        'properties': {'selected': {'type': 'array', 'minItems': min(count, len(candidates)), 'maxItems': min(count, len(candidates)), 'items': {
             'type': 'object', 'properties': {
                 'index': {'type': 'integer', 'minimum': 0, 'maximum': len(candidates) - 1},
                 'title': {'type': 'string', 'minLength': 1, 'maxLength': 80},
@@ -166,6 +166,9 @@ def select_editorial_segments(provider, candidates: list[LongVideoSegment], *, c
     selected = answer.get('selected') if isinstance(answer, dict) else None
     if not isinstance(selected, list) or not selected:
         raise ValueError('O diretor local não selecionou nenhum trecho válido.')
+    required_count = min(count, len(candidates))
+    if len(selected) != required_count:
+        raise ValueError(f'O diretor local deveria selecionar {required_count} trecho(s), mas retornou {len(selected)}.')
     result, used = [], set()
     for choice in selected:
         if not isinstance(choice, dict):
