@@ -24,6 +24,7 @@ from app.services.editorial_director import (
     timeline_from_response,
 )
 from app.services.visual_director import VISION_DIRECTOR_VERSION, describe_imported_images, editorial_context
+from app.services.editorial_analysis import pre_export_report, write_pre_export_report
 from datetime import datetime, timezone
 from math import isfinite
 import hashlib
@@ -239,6 +240,24 @@ class Pipeline:
                     else:
                         omitted_events.append(event.get('intent', 'unknown'))
                 project.settings['audio_event_omissions'] = omitted_events
+                # Informational only: preserve the user's current timeline and
+                # allow export even when editorial observations need review.
+                editorial_report = pre_export_report(
+                    script=project.settings.get('narration_text') or project.script,
+                    duration=duration,
+                    alignment=alignment_metadata(root / 'legendas.srt'),
+                    timeline=timeline,
+                    narration_wav=root / 'narracao.wav',
+                    ass_path=root / 'legendas.ass',
+                    music_enabled=bool(music),
+                    audio_event_omissions=omitted_events,
+                )
+                write_pre_export_report(editorial_report, root / 'pre_export_report.json')
+                project.settings['pre_export_report'] = {
+                    'version': editorial_report['version'],
+                    'warning_count': len(editorial_report['warnings']),
+                    'generated_for_duration': editorial_report['duration_seconds'],
+                }
                 result = render(settings['ffmpeg'], [service.artifact(project, name) for name in project.images], root / 'narracao.wav', root / 'legendas.srt', root / 'video_final.mp4', cancel,
                     motion=bool(settings.get('video_motion', False) or has_motion), transition=bool(settings.get('video_transition', False) or has_transition),
                     music=music, music_volume=settings.get('video_music_volume', 25) / 100,

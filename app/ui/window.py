@@ -292,6 +292,7 @@ class Window(QMainWindow):
         media_tools = QHBoxLayout()
         self.button(media_tools, 'Ajustar sincronização por palavra', self.edit_caption_timings)
         self.button(media_tools, 'Ouvir prévia do áudio final', self.preview_final_audio)
+        self.button(media_tools, 'Ver relatório pré-exportação', self.show_pre_export_report)
         self.button(media_tools, 'Abrir pasta do projeto', self.open_folder)
         self.button(media_tools, 'Exportar somente MP4', self.video)
         advanced_media_layout.addLayout(media_tools)
@@ -1618,6 +1619,29 @@ class Window(QMainWindow):
             worker.start()
         except Exception as error:
             self.error('Prévia de áudio', error)
+
+    def show_pre_export_report(self):
+        """Display advisory observations without turning them into export gates."""
+        try:
+            if not self.current:
+                raise ValueError('Abra um projeto antes de consultar o relatório editorial.')
+            target = self.service.artifact(self.current, 'pre_export_report.json')
+            if not target.is_file():
+                raise ValueError('O relatório será criado automaticamente na próxima exportação de MP4.')
+            report = json.loads(target.read_text(encoding='utf8'))
+            warnings = report.get('warnings', []) if isinstance(report, dict) else []
+            rows = []
+            for warning in warnings:
+                if not isinstance(warning, dict):
+                    continue
+                moment = warning.get('timestamp')
+                at = '' if moment is None else f' ({float(moment):.1f}s)'
+                rows.append(f"• {warning.get('cause', 'Aviso editorial')}{at}\n  Sugestão: {warning.get('suggestion', 'Revise manualmente.')}")
+            text = 'Nenhum alerta editorial foi encontrado.' if not rows else '\n\n'.join(rows)
+            text += '\n\nEstes avisos são informativos e não bloqueiam a exportação.'
+            QMessageBox.information(self, 'Relatório pré-exportação', text)
+        except Exception as error:
+            self.error('Relatório pré-exportação', error)
 
     def edit_caption_timings(self):
         """Let the user correct validated ASR word intervals before export."""

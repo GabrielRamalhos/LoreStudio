@@ -45,6 +45,8 @@ O preset editorial salvo (Neutral, Cinematic, Dynamic, Suspense ou Emotional) to
 
 Cada exportação preserva o MP4 anterior até validar o novo arquivo. A pasta do projeto recebe `render_manifest.json` (timeline, hashes, fontes e licenças) e `technical_report.json` (codec, dimensões, FPS, duração e decodificação de frames). SRT continua disponível para acessibilidade e o MP4 exige ASS sincronizado por palavra, com destaque da palavra ativa.
 
+Antes de cada exportação, o Studio também grava `pre_export_report.json`. Ele apresenta observações editoriais locais e explicáveis — primeira revelação provável, pausas relevantes, cenas longas ou estáticas, CTA, área segura das legendas e efeitos licenciados ausentes. Esses avisos não alteram roteiro, narração ou timeline e não bloqueiam a exportação; não são previsão de retenção ou desempenho no YouTube. Consulte **Mídias > Opções avançadas de edição > Ver relatório pré-exportação** após uma exportação.
+
 ## Trilha adaptativa
 
 Na aba **Mídias**, use **Adicionar ou trocar trilha** depois de gerar a narração. A faixa é validada e copiada para dentro do projeto, portanto o Short continua reexportável mesmo se o arquivo original for movido. A mixagem é local: acompanha a duração da narração, aplica fades, normalização, limiter e abaixa automaticamente a música enquanto há voz. O controle de volume vai de 0 a 100% e inicia em 25%. Use **Ouvir prévia do áudio final** antes de exportar para conferir voz e trilha; o MP4 só é aceito quando possui stream AAC válido. Os cortes das imagens usam batidas quando elas forem detectáveis e usam distribuição uniforme segura quando não forem. Remover ou trocar a faixa deixa somente o vídeo pendente. Você é responsável por ter os direitos de uso da música escolhida.

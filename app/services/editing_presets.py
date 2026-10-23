@@ -7,6 +7,21 @@ PRESETS = {
     'dynamic': {'name': 'Dynamic', 'motion': 'pan_right', 'transition': 'impact_cut', 'subtitle_style': 'highlight', 'music_volume': 25},
     'suspense': {'name': 'Suspense', 'motion': 'slow_pull', 'transition': 'fade', 'subtitle_style': 'highlight', 'music_volume': 20},
     'emotional': {'name': 'Emotional', 'motion': 'slow_push', 'transition': 'dissolve', 'subtitle_style': 'standard', 'music_volume': 20},
+    'misterio': {
+        'name': 'Mistério', 'motion': 'slow_pull', 'transition': 'fade',
+        'subtitle_style': 'highlight', 'music_volume': 20, 'mix_profile': 'cinematografica',
+        'audio_intents': ['suspense', 'revelation'],
+    },
+    'epico': {
+        'name': 'Épico', 'motion': 'slow_push', 'transition': 'impact_cut',
+        'subtitle_style': 'highlight', 'music_volume': 25, 'mix_profile': 'cinematografica',
+        'audio_intents': ['impact', 'climax'],
+    },
+    'revelacao': {
+        'name': 'Revelação', 'motion': 'impact_zoom', 'transition': 'dissolve',
+        'subtitle_style': 'highlight', 'music_volume': 22, 'mix_profile': 'cinematografica',
+        'audio_intents': ['revelation', 'impact'],
+    },
     'historia_sombria': {
         'name': 'História sombria', 'motion': 'slow_pull', 'transition': 'dissolve',
         'subtitle_style': 'highlight', 'music_volume': 22, 'mix_profile': 'cinematografica',
@@ -48,6 +63,11 @@ def preset_key(value: str | None) -> str:
         'top 5': 'top_5',
         'teoria e mistério': 'teoria_misterio',
         'teoria e misterio': 'teoria_misterio',
+        'mistério': 'misterio',
+        'epico': 'epico',
+        'épico': 'epico',
+        'revelação': 'revelacao',
+        'revelacao': 'revelacao',
     }
     return aliases.get(raw, raw)
 
